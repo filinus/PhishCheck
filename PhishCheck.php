@@ -162,7 +162,7 @@ interface MemcacheInterface {
      * @param string $key
      * @param mixed $value
      * @param int $timeout
-     * @return mixed
+     * @return boolean
      */
     public function add($key, $value, $timeout);
 
@@ -170,7 +170,7 @@ interface MemcacheInterface {
      * @param string $key
      * @param mixed $value
      * @param int $timeout
-     * @return mixed
+     * @return boolean
      */
     public function replace($key, $value, $timeout);
 
@@ -183,7 +183,6 @@ interface MemcacheInterface {
     public function isSafeMemcacheError();
 }
 
-require __DIR__ . DIRECTORY_SEPARATOR . 'Memcached.php';
 
 class Cache {
     private $mcache;
@@ -210,11 +209,37 @@ class Cache {
         namespace\TIME_TO_LIVE => self::TIMEOUT_LAST_USED_BIG_FILE
     );
 
+    /**
+     * safely include proxy file for one on Memcache implementation
+     *
+     * @param string $className
+     * @return bool|string
+     */
+    protected static function loadProxyClass($className='Memcached') {
+        $className = ucfirst((string)$className);
+        if ($className!='Memcache' && $className!='Memcached') {
+            return 'Only Memcache and Memcached extensions/classes are supported. Unknown class '.$className;
+        }
+        if (class_exists("\\$className", false)) {
+            $file = __DIR__ . DIRECTORY_SEPARATOR . "$className.php";
+            $included = @include $file;
+        } else {
+            return "class/extension $className not available. check PHP configuration";
+        }
+
+        if (!$included) {
+            return "Unable include source file $file";
+        }
+        return false;
+    }
+
     function __construct(array $options=array()) {
 
         if (!empty($options)) {
             $this->options = array_merge($this->options, $options);
         }
+
+        static::loadProxyClass('Memcached');
 
         if (!empty($options[namespace\PERSISTENT_ID])) {
             $this->mcache = new namespace\Memcached($options[namespace\PERSISTENT_ID]);
