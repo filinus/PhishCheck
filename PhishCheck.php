@@ -139,33 +139,54 @@ class UrlUtils {
 
 }
 
-class Memcached extends \Memcached {
+/**
+ * Interface MemcacheInterface allows implement memcache useing either Memcache and Memcached
+ * @package PhishCheck
+ */
+interface MemcacheInterface {
+    /**
+     * @param string $key
+     * @return mixed
+     */
+    public function get($key);
+
+    /**
+     * @param string $key
+     * @param mixed $value
+     * @param int $timeout
+     * @return mixed
+     */
+    public function set($key, $value, $timeout);
+
+    /**
+     * @param string $key
+     * @param mixed $value
+     * @param int $timeout
+     * @return mixed
+     */
+    public function add($key, $value, $timeout);
+
+    /**
+     * @param string $key
+     * @param mixed $value
+     * @param int $timeout
+     * @return mixed
+     */
+    public function replace($key, $value, $timeout);
+
     /**
      * raises exception if there were some non-data manipulation result code
      *
      * @return bool
      * @throws MemcacheFatalError
      */
-    public function isSafeMemcacheError() {
-        $mcResultCode = $this->getResultCode();
-        if (in_array($mcResultCode, array(
-            \Memcached::RES_SUCCESS,
-            \Memcached::RES_STORED,
-            \Memcached::RES_DELETED,
-            \Memcached::RES_DATA_EXISTS,
-            \Memcached::RES_NOTFOUND,
-            \Memcached::RES_NOTSTORED,
-            \Memcached::RES_END,
-            \Memcached::RES_BUFFERED
-        ))) {
-            return true;
-        }
-        throw new namespace\MemcacheFatalError('Memcache Fatal Error ', $mcResultCode);
-    }
+    public function isSafeMemcacheError();
 }
 
+require __DIR__ . DIRECTORY_SEPARATOR . 'Memcached.php';
+
 class Cache {
-    private $memcached;
+    private $mcache;
 
     const HEADER_ETAG = 'etag';
     const HEADER_LAST_MODIFIED = 'last-modified';
@@ -196,29 +217,29 @@ class Cache {
         }
 
         if (!empty($options[namespace\PERSISTENT_ID])) {
-            $this->memcached = new namespace\Memcached($options[namespace\PERSISTENT_ID]);
+            $this->mcache = new namespace\Memcached($options[namespace\PERSISTENT_ID]);
         } else {
-            $this->memcached = new namespace\Memcached();
+            $this->mcache = new namespace\Memcached();
         }
 
-        //$this->memcached->setOption(\Memcached::OPT_COMPRESSION, true);
-        //$this->memcached->setOption(\Memcached::OPT_HASH, \Memcached::HASH_FNV1A_64);
-        //$this->memcached->setOption(\Memcached::OPT_SERIALIZER, \Memcached::SERIALIZER_IGBINARY);
-        $this->memcached->setOption(\Memcached::OPT_BINARY_PROTOCOL, true);
-        $this->memcached->setOption(\Memcached::OPT_RETRY_TIMEOUT, 1 );
-        $this->memcached->setOption(\Memcached::OPT_LIBKETAMA_COMPATIBLE,  true );
-        $this->memcached->setOption(\Memcached::OPT_TCP_NODELAY, true);
+        //$this->mcache->setOption(\Memcached::OPT_COMPRESSION, true);
+        //$this->mcache->setOption(\Memcached::OPT_HASH, \Memcached::HASH_FNV1A_64);
+        //$this->mcache->setOption(\Memcached::OPT_SERIALIZER, \Memcached::SERIALIZER_IGBINARY);
+        $this->mcache->setOption(\Memcached::OPT_BINARY_PROTOCOL, true);
+        $this->mcache->setOption(\Memcached::OPT_RETRY_TIMEOUT, 1 );
+        $this->mcache->setOption(\Memcached::OPT_LIBKETAMA_COMPATIBLE,  true );
+        $this->mcache->setOption(\Memcached::OPT_TCP_NODELAY, true);
 
         $host=$options[MC_HOST];
         $port=intval($options[MC_PORT]);
 
-        $this->memcached->addServer($host,$port);
+        $this->mcache->addServer($host,$port);
     }
 
     private $fp;
     function __destruct() {
-        if ($this->memcached!=null && !$this->memcached->isPersistent()) {
-            $this->memcached->quit(); //will be ignored for pconnect
+        if ($this->mcache!=null && !$this->mcache->isPersistent()) {
+            $this->mcache->quit(); //will be ignored for pconnect
         }
 
         if (isset($this->fp)) {
@@ -349,9 +370,9 @@ class Cache {
      * @return void;
      */
     public function updateIfNecessary() {
-        $mc = $this->memcached; // shorthand
+        $mc = $this->mcache; // shorthand
 
-        $wasHeadRequestActivityRecently = $mc->get(self::KEY_HEAD_REQUEST_RECENTLY, null, $cas);
+        $wasHeadRequestActivityRecently = $mc->get(self::KEY_HEAD_REQUEST_RECENTLY);
         if ($wasHeadRequestActivityRecently) { // was HEAD recently done?
             return;
         }
@@ -378,7 +399,7 @@ class Cache {
             return;
         }
 
-        $cacheETag = $mc->get(self::KEY_LAST_USED_ETAG, null, $cas);
+        $cacheETag = $mc->get(self::KEY_LAST_USED_ETAG);
         $mc->isSafeMemcacheError();
         if ($headETag ===  $cacheETag) {
             $mc->touch(self::KEY_HEAD_REQUEST_RECENTLY, static::TIMEOUT_HEAD_REQUEST_CHECKED);
@@ -427,8 +448,8 @@ class Cache {
     }
 
     protected function getLastUsedTag() {
-        //$result = $this->memcached->get(static::LAST_USED_ETAG, null, $this->lastUsedEtagCAS);
-        $result = $this->memcached->get(static::KEY_LAST_USED_ETAG);
+        //$result = $this->mcache->get(static::LAST_USED_ETAG, null, $this->lastUsedEtagCAS);
+        $result = $this->mcache->get(static::KEY_LAST_USED_ETAG);
         return $result;
     }
 
@@ -485,7 +506,7 @@ class Cache {
      * resets memcache
      */
     public function resetCache() {
-        $this->memcached->flush();
+        $this->mcache->flush();
     }
 
     /**
@@ -497,7 +518,7 @@ class Cache {
         $fp = $this->getStreamForTotalLoad($eTag);
 
         if( $fp ) {
-            $mc = $this->memcached;
+            $mc = $this->mcache;
             $mc->setOption(\Memcached::OPT_BUFFER_WRITES, true);
             $mc->setOption(\Memcached::OPT_NO_BLOCK, true);
 
@@ -557,14 +578,14 @@ class Cache {
         $this->updateIfNecessary();
 
         $hashKey = static::urlHashCode($normalizedUrl);
-        $cached = $this->memcached->get($hashKey, null, $cas);
+        $cached = $this->mcache->get($hashKey, null, $cas);
 
-        $this->memcached->isSafeMemcacheError();
+        $this->mcache->isSafeMemcacheError();
 
         if ($cached!==false) { // phish found
             list ($phishNo, $phishUrl, $utc) = $cached;
-            $lastUsedUtc = $this->memcached->get(self::KEY_LAST_USED_UTC, null, $cas);
-            $this->memcached->isSafeMemcacheError();
+            $lastUsedUtc = $this->mcache->get(self::KEY_LAST_USED_UTC);
+            $this->mcache->isSafeMemcacheError();
             $isNotLongerPhish = ($lastUsedUtc!==false && $lastUsedUtc>$utc);
 
             if (!$isNotLongerPhish) { // phish was confirmed by recent data update
