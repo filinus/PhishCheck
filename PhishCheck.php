@@ -12,6 +12,8 @@ const MC_PORT = 'port';
 const PT_TOKEN = 'pt_token';
 const TIME_TO_LIVE = 'ttl';
 
+const MC_CLASS = 'memcache_class';
+
 const FILTER_BZIP2 = 'bzip2.decompress';
 const FILTER_ZLIB = 'zlib.deflate';
 
@@ -23,6 +25,7 @@ abstract class PhishCheckException extends \Exception {
 }
 
 class MemcacheFatalError extends PhishCheckException {}
+class InstallationError extends MemcacheFatalError {}
 class HttpException extends PhishCheckException {}
 class InvalidPhishTagHeaders extends PhishCheckException {}
 class CacheException extends PhishCheckException {}
@@ -181,6 +184,11 @@ interface MemcacheInterface {
      * @throws MemcacheFatalError
      */
     public function isSafeMemcacheError();
+
+    /**
+     * @return boolean
+     */
+    public function isPersistent();
 }
 
 
@@ -206,7 +214,8 @@ class Cache {
         namespace\MC_HOST=>'127.0.0.1',
         namespace\MC_PORT => 11211,
         namespace\PT_TOKEN => false, //'app for opendns'
-        namespace\TIME_TO_LIVE => self::TIMEOUT_LAST_USED_BIG_FILE
+        namespace\TIME_TO_LIVE => self::TIMEOUT_LAST_USED_BIG_FILE,
+        namespace\MC_CLASS=>'Memcached'
     );
 
     /**
@@ -216,13 +225,13 @@ class Cache {
      * @return bool|string
      */
     protected static function loadProxyClass($className='Memcached') {
-        $className = ucfirst((string)$className);
+        $className = self::normalizeClassName($className);
         if ($className!='Memcache' && $className!='Memcached') {
             return 'Only Memcache and Memcached extensions/classes are supported. Unknown class '.$className;
         }
         if (class_exists("\\$className", false)) {
             $file = __DIR__ . DIRECTORY_SEPARATOR . "$className.php";
-            $included = @include $file;
+            $included = require $file;
         } else {
             return "class/extension $className not available. check PHP configuration";
         }
@@ -233,27 +242,31 @@ class Cache {
         return false;
     }
 
+    private static function normalizeClassName($className) {
+        return ucfirst(strtolower((string)$className));
+    }
+
     function __construct(array $options=array()) {
 
         if (!empty($options)) {
             $this->options = array_merge($this->options, $options);
         }
 
-        static::loadProxyClass('Memcached');
-
-        if (!empty($options[namespace\PERSISTENT_ID])) {
-            $this->mcache = new namespace\Memcached($options[namespace\PERSISTENT_ID]);
-        } else {
-            $this->mcache = new namespace\Memcached();
+        $className = self::normalizeClassName($options[namespace\MC_CLASS]);
+        $error = static::loadProxyClass($className);
+        if (!empty($error)) {
+            throw new InstallationError($error);
         }
+
+//        if (!empty($options[namespace\PERSISTENT_ID])) {
+//            $this->mcache = new $className($options[namespace\PERSISTENT_ID]); // namespace\$className
+//        } else {
+            $this->mcache = new $className();
+//        }
 
         //$this->mcache->setOption(\Memcached::OPT_COMPRESSION, true);
         //$this->mcache->setOption(\Memcached::OPT_HASH, \Memcached::HASH_FNV1A_64);
         //$this->mcache->setOption(\Memcached::OPT_SERIALIZER, \Memcached::SERIALIZER_IGBINARY);
-        $this->mcache->setOption(\Memcached::OPT_BINARY_PROTOCOL, true);
-        $this->mcache->setOption(\Memcached::OPT_RETRY_TIMEOUT, 1 );
-        $this->mcache->setOption(\Memcached::OPT_LIBKETAMA_COMPATIBLE,  true );
-        $this->mcache->setOption(\Memcached::OPT_TCP_NODELAY, true);
 
         $host=$options[MC_HOST];
         $port=intval($options[MC_PORT]);
@@ -603,7 +616,7 @@ class Cache {
         $this->updateIfNecessary();
 
         $hashKey = static::urlHashCode($normalizedUrl);
-        $cached = $this->mcache->get($hashKey, null, $cas);
+        $cached = $this->mcache->get($hashKey);
 
         $this->mcache->isSafeMemcacheError();
 

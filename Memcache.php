@@ -8,7 +8,18 @@
 namespace PhishCheck;
 
 
-class Memcached extends \Memcache implements MemcacheInterface {
+class Memcache extends \Memcache implements namespace\MemcacheInterface {
+    function __construct(array $options=array()) {
+        parent::__costruct();
+    }
+
+    private $isPersitent = false;
+    /**
+     * @return boolean
+     */
+    public function isPersistent() {
+        return $this->isPersitent;
+    }
 
     /**
      * raises exception if there were some non-data manipulation result code
@@ -32,4 +43,44 @@ class Memcached extends \Memcache implements MemcacheInterface {
         }
         throw new namespace\MemcacheFatalError('Memcache Fatal Error ', $mcResultCode);
     }
+
+    /**
+     * @param string $key
+     * @return mixed
+     */
+    public function get($key) {
+        return parent::get($key);
+    }
+
+    /**
+     * @param string $key
+     * @param mixed $value
+     * @param int $timeout
+     * @return mixed
+     */
+    public function set($key, $value, $timeout) {
+        return parent::set($key, $value, null, $timeout);
+    }
+
+    /**
+     * @param string $key
+     * @param mixed $value
+     * @param int $timeout
+     * @return boolean
+     */
+    public function add($key, $value, $timeout) {
+        return parent::add($key, $value, null, $timeout);
+    }
+
+
+    /**
+     * @param string $key
+     * @param mixed $value
+     * @param int $timeout
+     * @return boolean
+     */
+    public function replace($key, $value, $timeout) {
+        return parent::replace($key, $value, null, $timeout);
+    }
+
 } 
