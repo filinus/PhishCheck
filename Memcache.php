@@ -7,7 +7,12 @@
 
 namespace PhishCheck;
 
-
+/**
+ * Class Memcache
+ * @package PhishCheck
+ * @class Memcache
+ * @deprecated
+ */
 class Memcache extends \Memcache implements namespace\MemcacheInterface {
     function __construct(array $options=array()) {
         parent::__costruct();
@@ -49,7 +54,8 @@ class Memcache extends \Memcache implements namespace\MemcacheInterface {
      * @return mixed
      */
     public function get($key) {
-        return parent::get($key);
+        $flag = false;
+        return parent::get($key, $flag);
     }
 
     /**

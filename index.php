@@ -3,7 +3,6 @@
 /**
  * @author val@filin.us
  */
-
 require __DIR__ . DIRECTORY_SEPARATOR . 'PhishCheck.php';
 
 
@@ -17,7 +16,7 @@ try {
 
     $options = array(
         PhishCheck\PT_TOKEN=>'8a3f4dfd6b19accc25a8339a935f60a87de10190063d60b8d305e541499dfd11',
-        PhishCheck\MC_CLASS=>'Memcache'
+        PhishCheck\MC_CLASS=>'Memcached'
     );
     $checker = new PhishCheck\Cache($options);
 
